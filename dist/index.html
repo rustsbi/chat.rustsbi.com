@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="RustSBI Chat，使用你自己的 API 探索 RISC-V 固件、SBI 规范和启动日志。">
+  <meta name="color-scheme" content="light">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src https: http://localhost:* http://127.0.0.1:* http://[::1]:*; base-uri 'none'; form-action 'none'">
+  <title>RustSBI Agent</title>
+  <link rel="icon" type="image/png" href="./rustsbi-logo.png">
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <div class="workspace">
+    <aside class="sidebar" id="sidebar" aria-label="对话记录">
+      <div class="brand">
+        <img class="brand-mark" src="./rustsbi-logo.png" alt="" width="36" height="36">
+        <strong>RustSBI Agent</strong>
+      </div>
+      <button class="new-chat" id="new-chat" type="button"><i class="icon plus" aria-hidden="true"></i>新建对话</button>
+      <div class="sidebar-history">
+        <h2>对话记录</h2>
+        <div class="history" id="history"></div>
+        <p class="history-empty" id="history-empty">暂无对话</p>
+      </div>
+      <div class="sidebar-bottom">
+        <a href="https://rustsbi.com/" target="_blank" rel="noopener noreferrer"><i class="icon globe" aria-hidden="true"></i>RustSBI 官网</a>
+        <a href="https://github.com/rustsbi/rustsbi/discussions" target="_blank" rel="noopener noreferrer"><i class="icon bubble" aria-hidden="true"></i>社区讨论</a>
+      </div>
+    </aside>
+    <button class="veil" id="sidebar-veil" aria-label="关闭侧栏" type="button" hidden></button>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="top-title">
+          <button type="button" class="icon-button mobile-menu" id="toggle-sidebar" aria-controls="sidebar" aria-expanded="false" aria-label="打开对话记录"><i class="icon panel" aria-hidden="true"></i></button>
+          <span id="chat-title">新建对话</span>
+        </div>
+        <button type="button" class="connection" id="toggle-settings" aria-controls="settings" aria-expanded="true"><i class="icon sliders" aria-hidden="true"></i><span id="connection-label">API 设置</span></button>
+      </header>
+      <div class="work-area with-settings" id="work-area">
+        <section class="chat-pane" aria-label="聊天">
+          <div class="chat-scroll" id="chat-scroll">
+            <div class="welcome" id="welcome">
+              <img class="welcome-logo" src="./rustsbi-logo.png" alt="" width="72" height="72">
+              <h1>问 RustSBI</h1>
+              <p>查 SBI 接口、芯片手册和启动日志。</p>
+              <div class="suggestions" aria-label="示例问题">
+                <button type="button" data-prompt="怎样在 QEMU virt 上启动 RustSBI？需要准备哪些文件？"><i class="icon terminal" aria-hidden="true"></i><span>在 QEMU virt 上启动 RustSBI</span></button>
+                <button type="button" data-prompt="BL808 的 UART 外设有哪些寄存器？列出常用寄存器的偏移，并注明手册页码。"><i class="icon chip" aria-hidden="true"></i><span>查 BL808 的 UART 寄存器</span></button>
+                <button type="button" data-prompt="RISC-V 板卡启动卡住时，怎样用串口日志定位故障发生在哪个阶段？"><i class="icon log" aria-hidden="true"></i><span>从串口日志定位启动故障</span></button>
+              </div>
+            </div>
+            <div class="messages" id="messages" hidden></div>
+          </div>
+          <div class="composer-area">
+            <p class="notice" id="storage-notice" role="status" hidden></p>
+            <p class="notice request-error" id="request-error" role="alert" hidden></p>
+            <form class="composer" id="composer">
+              <label class="sr-only" for="prompt">消息</label>
+              <textarea id="prompt" rows="1" required placeholder="输入关于 RustSBI 的问题…"></textarea>
+              <div class="composer-bar">
+                <span class="model-label" id="model-label"><i class="icon chip" aria-hidden="true"></i><span>尚未连接模型</span></span>
+                <button class="send-button" id="send" type="submit" aria-label="发送消息" title="发送消息" disabled><i class="icon send" aria-hidden="true"></i></button>
+                <button class="send-button" id="stop" type="button" aria-label="停止生成" title="停止生成" hidden><i class="icon stop" aria-hidden="true"></i></button>
+              </div>
+            </form>
+            <p class="composer-caption"><span><kbd>Enter</kbd> 发送，<kbd>Shift</kbd> + <kbd>Enter</kbd> 换行</span><a id="knowledge-status" href="https://github.com/rustsbi/Agent" target="_blank" rel="noopener noreferrer">RustSBI Agent 知识库</a></p>
+          </div>
+        </section>
+
+        <aside class="settings" id="settings" aria-labelledby="settings-title">
+          <div class="settings-top"><h2 id="settings-title">API 设置</h2><button type="button" class="icon-button" id="close-settings" title="关闭设置" aria-label="关闭设置"><i class="icon close" aria-hidden="true"></i></button></div>
+          <p class="settings-intro">填写支持跨域请求的 OpenAI 兼容服务。</p>
+          <form class="settings-form" id="settings-form" autocomplete="off">
+            <label for="endpoint">Base URL</label>
+            <div class="endpoint-field">
+              <input id="endpoint" name="endpoint" type="url" maxlength="512" required spellcheck="false" value="https://api.openai.com/v1" inputmode="url">
+              <button type="button" class="icon-button refresh-models" id="refresh-models" aria-label="刷新模型列表" title="刷新模型列表" disabled><i class="icon refresh" aria-hidden="true"></i></button>
+            </div>
+            <label for="api-key">API Key</label>
+            <div class="password-field">
+              <input id="api-key" name="api-key" type="password" maxlength="1024" required placeholder="输入你的 API Key" autocomplete="off" spellcheck="false" autocapitalize="off">
+              <button type="button" class="icon-button toggle-key" id="toggle-key" aria-label="显示密钥" aria-pressed="false" title="显示密钥"><i class="icon eye" aria-hidden="true"></i></button>
+            </div>
+            <label for="model">模型 ID</label>
+            <div class="model-field">
+              <select id="model" name="model" aria-describedby="model-status" required disabled>
+                <option value="" disabled selected>请先刷新模型列表</option>
+              </select>
+            </div>
+            <p class="model-status" id="model-status" role="status">填写 API Key，刷新后选择模型。</p>
+            <p class="settings-error" id="settings-error" role="alert" hidden></p>
+            <button class="primary-button" id="save-settings" type="submit" disabled>保存并开始</button>
+            <button class="forget-key" id="forget-key" type="button" hidden>移除 API 设置</button>
+          </form>
+          <div class="privacy-note"><i class="icon lock" aria-hidden="true"></i><p>密钥和近期对话加密保存在 Cookie 中（30 天）。浏览器会把消息和检索片段直接发给所选 API。</p></div>
+        </aside>
+      </div>
+    </main>
+  </div>
+  <dialog id="delete-dialog">
+    <form method="dialog">
+      <h2>删除这条对话？</h2>
+      <p>“<span id="delete-title"></span>”将从对话记录中移除。</p>
+      <div class="dialog-actions">
+        <button type="submit" value="cancel" autofocus>取消</button>
+        <button type="submit" value="delete" class="danger-button">删除对话</button>
+      </div>
+    </form>
+  </dialog>
+  <div class="sr-only" id="announcer" role="status"></div>
+</body>
+</html>
