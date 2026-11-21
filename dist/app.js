@@ -15,6 +15,8 @@ const list = $("messages");
 const sidebar = $("sidebar");
 const olderMessages = $("older-messages");
 const historyFile = $("history-file");
+const knowledgeToggle = $("knowledge-toggle");
+const knowledgeMenu = $("knowledge-menu");
 const articles = new Map();
 const defaultEndpoint = "https://api.openai.com/v1";
 let chats = [];
@@ -187,11 +189,28 @@ function fillSettings(ids = settings ? [settings.model] : []) {
   syncComposer();
 }
 
+function showKnowledgeMenu(open, restoreFocus = false) {
+  knowledgeMenu.hidden = !open;
+  knowledgeToggle.setAttribute("aria-expanded", String(open));
+  if (restoreFocus) knowledgeToggle.focus();
+}
+
+function dismissKnowledgeOutside(event) {
+  if (!knowledgeMenu.hidden && !knowledgeToggle.parentElement.contains(event.target)) {
+    showKnowledgeMenu(false);
+  }
+}
+
+knowledgeToggle.onclick = () => showKnowledgeMenu(knowledgeMenu.hidden);
+$("knowledge-link").onclick = () => showKnowledgeMenu(false, true);
+document.addEventListener("click", dismissKnowledgeOutside);
+document.addEventListener("focusin", dismissKnowledgeOutside);
+
 function updateKnowledge() {
   const label = $("knowledge-status");
   return loadKnowledge().then((data) => {
-    label.textContent = "RustSBI Agent 知识库";
-    label.title = data.files.length + " 份资料，版本 " + data.revision.slice(0, 7);
+    label.textContent = data.files.length + " 份资料";
+    label.title = "版本 " + data.revision.slice(0, 7);
     return data;
   }).catch(() => {
     label.textContent = "知识库暂不可用";
@@ -621,7 +640,10 @@ document.querySelectorAll("[data-prompt]").forEach((button) => {
   });
 });
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && sidebar.classList.contains("open")) {
+  if (event.key !== "Escape") return;
+  if (!knowledgeMenu.hidden) {
+    showKnowledgeMenu(false, true);
+  } else if (sidebar.classList.contains("open")) {
     sidebarOpen(false);
     $("toggle-sidebar").focus();
   }

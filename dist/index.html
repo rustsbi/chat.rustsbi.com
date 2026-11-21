@@ -72,8 +72,16 @@
               <label class="sr-only" for="prompt">消息</label>
               <textarea id="prompt" rows="1" required placeholder="输入关于 RustSBI 的问题…"></textarea>
               <div class="composer-bar">
-                <span class="model-label" id="model-label"><i class="icon chip" aria-hidden="true"></i><span>尚未连接模型</span></span>
-                <a class="knowledge-link" id="knowledge-status" href="https://github.com/rustsbi/Agent" target="_blank" rel="noopener noreferrer">RustSBI Agent 知识库</a>
+                <span class="model-label" id="model-label"><i class="icon layers" aria-hidden="true"></i><span>尚未连接模型</span></span>
+                <div class="knowledge-control">
+                  <button class="icon-button knowledge-toggle" id="knowledge-toggle" type="button" aria-label="知识库" title="知识库" aria-expanded="false" aria-controls="knowledge-menu"><i class="icon book" aria-hidden="true"></i></button>
+                  <div class="knowledge-menu" id="knowledge-menu" role="group" aria-label="知识库目录" hidden>
+                    <a class="knowledge-link" id="knowledge-link" href="https://github.com/rustsbi/Agent" target="_blank" rel="noopener noreferrer">
+                      <span>RustSBI Agent 知识库</span>
+                      <small id="knowledge-status" role="status">正在加载资料…</small>
+                    </a>
+                  </div>
+                </div>
                 <button class="send-button" id="send" type="submit" aria-label="发送消息" title="发送消息" disabled><i class="icon send" aria-hidden="true"></i></button>
                 <button class="send-button" id="stop" type="button" aria-label="停止生成" title="停止生成" hidden><i class="icon stop" aria-hidden="true"></i></button>
               </div>

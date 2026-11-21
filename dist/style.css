@@ -72,7 +72,7 @@ a { color: var(--blue-dark); }
 .suggestions button:hover { color: var(--blue-dark); background: var(--surface); }
 .suggestions .icon { color: var(--muted); }
 .composer-area { width: min(100%, 780px); margin: 0 auto; padding: 10px clamp(20px, 4vw, 40px) 19px; }
-.composer { padding: 12px 12px 8px; border: 1px solid #d7d7dd; border-radius: 14px; background: #fff; }
+.composer { position: relative; padding: 12px 12px 8px; border: 1px solid #d7d7dd; border-radius: 14px; background: #fff; }
 .composer:focus-within { border-color: #8dbaf0; box-shadow: 0 0 0 3px #0064d815; }
 .composer textarea { display: block; width: 100%; min-height: 31px; max-height: 150px; padding: 2px 3px; resize: none; border: 0; color: var(--ink); background: transparent; outline: 0; line-height: 1.5; }
 .composer textarea:focus-visible { outline: 0; }
@@ -80,8 +80,12 @@ a { color: var(--blue-dark); }
 .composer-bar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .model-label { display: inline-flex; align-items: center; gap: 6px; padding: 4px; min-width: 0; color: var(--muted); font-size: .8125rem; }
 .model-label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.knowledge-link { flex: none; color: var(--muted); font-size: .8125rem; line-height: 1.5; text-decoration: none; white-space: nowrap; }
-.knowledge-link:hover { color: var(--blue-dark); text-decoration: underline; }
+.knowledge-control { flex: none; }
+.knowledge-toggle[aria-expanded="true"] { background: var(--selected); color: var(--ink); }
+.knowledge-menu { position: absolute; inset-inline-end: 12px; inset-block-end: calc(100% + 8px); z-index: 2; width: min(15rem, calc(100% - 24px)); padding: 4px; border: 1px solid var(--subtle); border-radius: 10px; background: #fff; box-shadow: 0 6px 18px rgb(0 0 0 / .1); }
+.knowledge-link { display: grid; gap: 3px; padding: 9px 11px; border-radius: 6px; color: var(--ink); font-size: .875rem; font-weight: 600; text-decoration: none; }
+.knowledge-link:hover { background: var(--surface); color: var(--blue-dark); }
+.knowledge-link small { color: var(--muted); font-size: .8125rem; font-weight: 400; }
 .send-button { display: grid; place-items: center; min-width: 35px; height: 35px; flex: none; border: 0; border-radius: 11px; background: var(--blue); color: #fff; }
 .send-button:hover { background: var(--blue-dark); }
 .send-button:disabled { background: var(--selected); color: #64646d; }
@@ -186,6 +190,12 @@ dialog p { color: var(--muted); overflow-wrap: anywhere; }
 .lock::after { border: 1.5px solid; border-radius: 2px; inset: 6px 2px 1px; }
 .send::before { inset: 1px 0 1px 0; width: auto; height: auto; border: 0; transform: none; background: currentColor; clip-path: polygon(0 39%, 100% 0, 69% 100%, 51% 57%, 85% 16%, 42% 49%); }
 .stop::before { inset: 3px; border-radius: 2px; background: currentColor; }
+.layers::before, .layers::after { left: 3px; width: 10px; height: 10px; border: 1.5px solid currentColor; transform: scaleY(.74) rotate(45deg); }
+.layers::before { top: 0; border-radius: 2px; }
+.layers::after { top: 4px; border-width: 0 1.5px 1.5px 0; border-bottom-right-radius: 2px; }
+.book::before, .book::after { top: 2px; bottom: 2px; width: 7px; border: 1.5px solid currentColor; }
+.book::before { left: 1px; border-radius: 2px 3px 0 2px; }
+.book::after { right: 1px; border-radius: 3px 2px 2px 0; }
 .panel::before { border: 1.5px solid; border-radius: 3px; inset: 2px 0; }
 .panel::after { top: 2px; bottom: 2px; left: 5px; width: 1.5px; background: currentColor; }
 .trash::before { inset: 5px 3px 1px; border: 1.5px solid; border-top: 0; border-radius: 0 0 3px 3px; }
