@@ -5,6 +5,12 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 let keyPromise;
 
+function subtleCrypto() {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) throw new Error("请通过 HTTPS 或 localhost 打开页面，才能加密保存 API Key 和对话。");
+  return subtle;
+}
+
 function cookie(name) {
   const start = prefix + name + "=";
   return document.cookie.split(/;\s*/).find((part) => part.startsWith(start))?.slice(start.length);
@@ -42,7 +48,7 @@ async function openKey() {
       request.onerror = () => reject(request.error);
     });
     if (key) return key;
-    const candidate = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+    const candidate = await subtleCrypto().generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
     return await new Promise((resolve, reject) => {
       const transaction = existing.transaction("encryption", "readwrite");
       const store = transaction.objectStore("encryption");
@@ -67,6 +73,7 @@ function base64(bytes) {
 }
 
 async function seal(name, value) {
+  const subtle = subtleCrypto();
   let bytes = encoder.encode(JSON.stringify(value));
   let codec = "j";
   if (name === "history" && typeof CompressionStream === "function" && typeof DecompressionStream === "function") {
@@ -76,7 +83,7 @@ async function seal(name, value) {
   }
   if (bytes.length > 2650) return "";
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encrypted = new Uint8Array(await crypto.subtle.encrypt(
+  const encrypted = new Uint8Array(await subtle.encrypt(
     { name: "AES-GCM", iv, additionalData: encoder.encode(name) }, await browserKey(), bytes,
   ));
   const envelope = new Uint8Array(iv.length + encrypted.length);
@@ -95,7 +102,7 @@ export async function readSaved(name) {
   const value = cookie(name);
   if (value === undefined) return null;
   const bytes = Uint8Array.from(atob(value.slice(1).replaceAll("-", "+").replaceAll("_", "/")), (char) => char.charCodeAt(0));
-  let clear = await crypto.subtle.decrypt(
+  let clear = await subtleCrypto().decrypt(
     { name: "AES-GCM", iv: bytes.slice(0, 12), additionalData: encoder.encode(name) }, await browserKey(), bytes.slice(12),
   );
   if (value[0] === "g") {
