@@ -115,7 +115,6 @@ a { color: var(--blue-dark); }
 .messages { width: min(100%, 780px); margin: 0 auto; padding: 28px clamp(20px, 4vw, 40px); }
 .message { display: flex; flex-direction: column; gap: 6px; margin: 0 0 23px; align-items: flex-start; }
 .message.user { align-items: flex-end; }
-.message-author { font-size: .8125rem; color: var(--muted); font-weight: 650; }
 .message-body { max-width: 100%; overflow-wrap: anywhere; line-height: 1.7; }
 .user .message-body { max-width: min(90%, 610px); padding: 8px 14px; border-radius: 15px 15px 4px 15px; background: var(--sidebar); color: var(--ink); white-space: pre-wrap; }
 .message-body p { margin: 0 0 9px; white-space: pre-wrap; }
@@ -221,4 +220,9 @@ dialog p { color: var(--muted); overflow-wrap: anywhere; }
 .sources details a:hover { text-decoration: underline; }
 @media (max-width: 370px) {
   .composer-caption { display: grid; }
+}
+
+@media (any-pointer: coarse) {
+  .composer-caption .keyboard-shortcuts { display: none; }
+  .composer-caption { justify-content: end; }
 }

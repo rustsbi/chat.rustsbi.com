@@ -229,9 +229,9 @@ function renderHistory() {
 
 function renderMessage(message) {
   const article = element("article", "message " + message.role);
-  const who = element("span", "message-author", message.role === "user" ? "你" : "RustSBI Chat");
+  article.setAttribute("aria-label", message.role === "user" ? "你的消息" : "回复");
   const body = element("div", "message-body");
-  article.append(who, body);
+  article.append(body);
   if (message.role === "user") {
     body.textContent = message.content;
     return article;
