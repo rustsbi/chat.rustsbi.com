@@ -21,7 +21,15 @@
       </div>
       <button class="new-chat" id="new-chat" type="button"><i class="icon plus" aria-hidden="true"></i>新建对话</button>
       <div class="sidebar-history">
-        <h2>对话记录</h2>
+        <div class="history-heading">
+          <h2>对话记录</h2>
+          <div class="history-tools" aria-label="对话备份">
+            <button id="import-history" type="button" disabled>导入</button>
+            <button id="export-history" type="button" disabled>导出</button>
+            <input id="history-file" type="file" accept=".json,application/json" hidden>
+          </div>
+        </div>
+        <p class="history-transfer-status" id="history-transfer-status" role="status" hidden></p>
         <div class="history" id="history"></div>
         <p class="history-empty" id="history-empty">暂无对话</p>
       </div>
@@ -53,6 +61,8 @@
                 <button type="button" data-prompt="RISC-V 板卡启动卡住时，怎样用串口日志定位故障发生在哪个阶段？"><i class="icon log" aria-hidden="true"></i><span>从串口日志定位启动故障</span></button>
               </div>
             </div>
+            <p class="messages-loading" id="messages-loading" role="status" hidden>正在读取对话…</p>
+            <button class="older-messages" id="older-messages" type="button" hidden>加载更早的消息</button>
             <div class="messages" id="messages" hidden></div>
           </div>
           <div class="composer-area">
@@ -96,7 +106,7 @@
             <button class="primary-button" id="save-settings" type="submit" disabled>保存并开始</button>
             <button class="forget-key" id="forget-key" type="button" hidden>移除 API 设置</button>
           </form>
-          <div class="privacy-note"><i class="icon lock" aria-hidden="true"></i><p>密钥和近期对话加密保存在 Cookie 中（30 天）。浏览器会把消息和检索片段直接发给所选 API。</p></div>
+          <div class="privacy-note"><i class="icon lock" aria-hidden="true"></i><p>密钥加密保存在 Cookie 中（30 天）。对话加密保存在此浏览器。浏览器只把本次所需的上下文和检索片段发给所选 API。</p></div>
         </aside>
       </div>
     </main>

@@ -40,6 +40,7 @@ jobs:
       - name: Version page assets
         run: |
           sed -i -e "s|[.]/style[.]css|./style.css?v=$GITHUB_SHA|" -e "s|[.]/app[.]js|./app.js?v=$GITHUB_SHA|" dist/index.html
+          sed -Ei 's|(from "[.]/[a-z-]+[.]js)"|\1?v='"$GITHUB_SHA"'"|g' dist/*.js
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:

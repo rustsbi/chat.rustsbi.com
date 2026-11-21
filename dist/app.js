@@ -1,4 +1,5 @@
-import { forget, readSaved, saveHistory, saveSettings } from "./storage.js";
+import { forget, readSaved, saveSettings } from "./storage.js";
+import { appendMessage, deleteConversation, exportHistory, importHistory, readMessagePage, rememberChat, setupHistory } from "./history.js";
 import { generate, listModels, normalizeEndpoint } from "./transport.js";
 import { instructions, loadKnowledge, lookup } from "./knowledge.js";
 import { element, formatMarkdown, icon, sourceLink } from "./render.js";
@@ -12,24 +13,18 @@ const refreshModelsButton = $("refresh-models");
 const scroll = $("chat-scroll");
 const list = $("messages");
 const sidebar = $("sidebar");
-const storageNotice = $("storage-notice");
-const storageStatus = element("span");
-const dismissStorageLimit = element("button", "icon-button");
-dismissStorageLimit.type = "button";
-dismissStorageLimit.setAttribute("aria-label", "关闭容量提示");
-dismissStorageLimit.append(icon("close"));
-storageStatus.setAttribute("role", "status");
-storageNotice.removeAttribute("role");
-storageNotice.append(storageStatus, dismissStorageLimit);
+const olderMessages = $("older-messages");
+const historyFile = $("history-file");
 const articles = new Map();
 const defaultEndpoint = "https://api.openai.com/v1";
 let chats = [];
 let active = null;
+let view = { messages: [], hasEarlier: false, loading: false };
 let settings = null;
 let currentJob = null;
 let deletion = null;
 let storageQueue = Promise.resolve();
-let storageLimitDismissed = false;
+let transferringHistory = false;
 let initialized = false;
 let savingSettings = false;
 let modelRequest = null;
@@ -40,36 +35,29 @@ function notice(id, text = "") {
   node.hidden = !text;
 }
 
-function showStorageNotice(text = "", dismissible = false) {
-  storageStatus.textContent = text;
-  dismissStorageLimit.hidden = !dismissible;
-  storageNotice.hidden = !text;
+function queueHistoryWrite(operation) {
+  const pending = storageQueue.then(operation);
+  storageQueue = pending.catch(() => {});
+  return pending;
 }
 
-dismissStorageLimit.onclick = () => {
-  storageLimitDismissed = true;
-  showStorageNotice();
-};
-
-function persist() {
-  const snapshot = structuredClone(chats).map((chat) => ({
-    ...chat,
-    messages: chat.messages.filter((message) => message.content || message.reasoning),
-  }));
-  const selected = active;
-  storageQueue = storageQueue.catch(() => {}).then(async () => {
-    try {
-      const limited = await saveHistory(snapshot, selected);
-      if (limited && !storageLimitDismissed) {
-        showStorageNotice("Cookie 容量有限。本次仅保存近期消息，刷新后可能看不到较早的内容。", true);
-      } else {
-        showStorageNotice();
-      }
-    } catch {
-      showStorageNotice("对话记录未能保存。请检查浏览器的 Cookie 和存储权限。");
+function saveMessages(chat, messages, select = false) {
+  const pending = messages.filter((message) =>
+    message.sequence === undefined && (message.content || message.reasoning),
+  );
+  return queueHistoryWrite(async () => {
+    for (const message of pending) {
+      if (message.sequence !== undefined) continue;
+      message.sequence = await appendMessage(chat, message, { create: chat.updatedAt === undefined, select });
+      chat.updatedAt = Date.now();
     }
   });
-  return storageQueue;
+}
+
+function historyWriteError(error) {
+  notice("storage-notice", error?.name === "QuotaExceededError"
+    ? "浏览器存储空间不足。请导出备份后清理记录。"
+    : "对话记录未能保存。请检查浏览器的站点存储权限。");
 }
 
 function sidebarOpen(open) {
@@ -299,23 +287,92 @@ function paintAnswer(message, view = articles.get(message)) {
   }
 }
 
+function syncHistoryControls() {
+  const disabled = !initialized || transferringHistory || Boolean(currentJob);
+  $("import-history").disabled = disabled;
+  $("export-history").disabled = disabled || !chats.length;
+  olderMessages.hidden = !view.hasEarlier;
+  olderMessages.disabled = Boolean(view.readingEarlier);
+}
+
 function renderChat() {
   articles.clear();
-  const messages = selectedChat()?.messages ?? [];
-  $("welcome").hidden = messages.length > 0;
+  const messages = view.messages;
+  $("messages-loading").hidden = !view.loading;
+  $("welcome").hidden = view.loading || messages.length > 0;
   list.hidden = !messages.length;
   list.replaceChildren(...messages.map(renderMessage));
   renderHistory();
   syncComposer();
+  syncHistoryControls();
   scroll.scrollTop = scroll.scrollHeight;
 }
 
-function switchChat(id) {
+async function switchChat(id, remember = true) {
   active = id;
   sidebarOpen(false);
   notice("request-error");
+  if (remember) void queueHistoryWrite(() => rememberChat(id)).catch(historyWriteError);
+  if (currentJob && currentJob.chatId === id) {
+    view = currentJob.view;
+    renderChat();
+    return;
+  }
+  const next = { messages: [], hasEarlier: false, loading: Boolean(id) };
+  view = next;
   renderChat();
-  void persist();
+  if (!id) return;
+  try {
+    // A selection can race a message write while a response is finishing.
+    await storageQueue;
+    if (view !== next) return;
+    Object.assign(next, await readMessagePage(id));
+  } catch {
+    if (view === next) notice("storage-notice", "无法读取保存的对话记录。");
+  } finally {
+    next.loading = false;
+    if (view === next) renderChat();
+  }
+}
+
+async function loadEarlier() {
+  const target = view;
+  const id = active;
+  const before = target.messages[0]?.sequence;
+  if (!id || !target.hasEarlier || target.readingEarlier || before === undefined) return;
+  target.readingEarlier = true;
+  syncHistoryControls();
+  try {
+    const page = await readMessagePage(id, before);
+    if (view !== target) return;
+    const previousHeight = scroll.scrollHeight;
+    const previousTop = scroll.scrollTop;
+    target.messages.unshift(...page.messages);
+    target.hasEarlier = page.hasEarlier;
+    list.prepend(...page.messages.map(renderMessage));
+    syncHistoryControls();
+    scroll.scrollTop = previousTop + scroll.scrollHeight - previousHeight;
+  } catch {
+    if (view === target) notice("storage-notice", "无法加载更早的消息。请重试。");
+  } finally {
+    target.readingEarlier = false;
+    if (view === target) syncHistoryControls();
+  }
+}
+
+function requestContext(messages, current) {
+  const result = [];
+  let remaining = 24000;
+  for (let index = messages.length - 1; index >= 0 && result.length < 16; index--) {
+    const { role, content } = messages[index];
+    if (!content) continue;
+    if (content.length > remaining) break;
+    result.unshift({ role, content });
+    remaining -= content.length;
+  }
+  while (result[0]?.role === "assistant") result.shift();
+  result.push({ role: "user", content: current });
+  return result;
 }
 
 function syncComposer() {
@@ -324,7 +381,7 @@ function syncComposer() {
   $("toggle-settings").title = settings ? settings.model + " · API 设置" : "API 设置";
   const busy = Boolean(currentJob);
   const canStop = busy && currentJob.chatId === active;
-  $("send").disabled = !initialized || busy || !prompt.value.trim();
+  $("send").disabled = !initialized || busy || transferringHistory || view.loading || !prompt.value.trim();
   $("send").hidden = canStop;
   $("stop").hidden = !canStop;
 }
@@ -336,30 +393,34 @@ function resizePrompt() {
 }
 
 async function submit() {
-  if (!initialized || currentJob) return;
+  if (!initialized || currentJob || transferringHistory || view.loading) return;
   const text = prompt.value.trim();
   if (!text) return;
   if (!settings) {
     showSettings(true, true);
     return;
   }
-  let chat = selectedChat();
-  if (!chat) chat = { id: crypto.randomUUID(), title: titleFrom(text), messages: [] };
+  const existing = selectedChat();
+  const chat = existing || { id: crypto.randomUUID(), title: titleFrom(text) };
   chats = [chat, ...chats.filter((item) => item !== chat)];
   active = chat.id;
-  const previous = chat.messages.findLast((message) => message.role === "user")?.content || "";
-  chat.messages.push({ role: "user", content: text });
-  const context = chat.messages.filter((message) => message.content).map(({ role, content }) => ({ role, content }));
+  const target = view;
+  const previous = target.messages.findLast((message) => message.role === "user")?.content || "";
+  const context = requestContext(target.messages, text);
+  const userMessage = { role: "user", content: text };
   const message = { role: "assistant", content: "", reasoning: "" };
-  chat.messages.push(message);
-  const job = { controller: new AbortController(), chatId: chat.id, message };
+  target.messages.push(userMessage, message);
+  const job = { controller: new AbortController(), chatId: chat.id, message, view: target };
   currentJob = job;
   const provider = settings;
   prompt.value = "";
   notice("request-error");
   resizePrompt();
   renderChat();
-  void persist();
+  const savedUser = saveMessages(chat, target.messages, true).then(() => true, (error) => {
+    historyWriteError(error);
+    return false;
+  });
   let frame;
   function scheduleAnswer() {
     if (frame !== undefined) return;
@@ -391,16 +452,24 @@ async function submit() {
   } finally {
     if (frame !== undefined) cancelAnimationFrame(frame);
     if (!message.content && !message.reasoning) {
-      chat.messages = chat.messages.filter((entry) => entry !== message);
+      target.messages = target.messages.filter((entry) => entry !== message);
       const view = articles.get(message);
       view?.body.closest("article").remove();
       articles.delete(message);
     } else {
       paintAnswer(message);
+      const userSaved = await savedUser;
+      if (userSaved && !job.deleted && chats.some((item) => item.id === chat.id)) {
+        try {
+          await saveMessages(chat, [message]);
+        } catch (error) {
+          historyWriteError(error);
+        }
+      }
     }
     currentJob = null;
     syncComposer();
-    void persist();
+    syncHistoryControls();
   }
 }
 
@@ -447,18 +516,81 @@ $("forget-key").onclick = () => {
   }
 };
 
-$("delete-dialog").addEventListener("close", () => {
-  const target = deletion;
+$("delete-dialog").addEventListener("close", async () => {
+  const id = deletion;
   deletion = null;
-  if ($("delete-dialog").returnValue !== "delete" || !target) return;
-  if (currentJob?.chatId === target) currentJob.controller.abort();
-  chats = chats.filter((chat) => chat.id !== target);
-  if (active === target) switchChat(null);
-  else {
-    renderHistory();
-    void persist();
+  if ($("delete-dialog").returnValue !== "delete" || !id) return;
+  if (currentJob?.chatId === id) {
+    currentJob.deleted = true;
+    currentJob.controller.abort();
+  }
+  try {
+    await queueHistoryWrite(() => deleteConversation(id));
+    chats = chats.filter((chat) => chat.id !== id);
+    if (active === id) void switchChat(null, false);
+    else {
+      renderHistory();
+      syncHistoryControls();
+    }
+  } catch (error) {
+    historyWriteError(error);
   }
 });
+
+olderMessages.onclick = loadEarlier;
+scroll.addEventListener("scroll", () => {
+  if (scroll.scrollTop < 80) void loadEarlier();
+}, { passive: true });
+
+async function transferHistory(operation, progress) {
+  if (transferringHistory || currentJob) return;
+  transferringHistory = true;
+  syncHistoryControls();
+  syncComposer();
+  notice("history-transfer-status", progress);
+  try {
+    await storageQueue;
+    notice("history-transfer-status", await operation());
+  } catch (error) {
+    notice("history-transfer-status", error?.name === "QuotaExceededError"
+      ? "浏览器存储空间不足，导入未完成。"
+      : "操作未完成。" + (error?.message || ""));
+  } finally {
+    transferringHistory = false;
+    syncHistoryControls();
+    syncComposer();
+  }
+}
+
+$("export-history").onclick = () => transferHistory(async () => {
+  const backup = await exportHistory();
+  const file = new Blob([JSON.stringify(backup)], { type: "application/json" });
+  const url = URL.createObjectURL(file);
+  const link = element("a");
+  link.href = url;
+  link.download = "rustsbi-agent-" + new Date().toISOString().slice(0, 10) + ".json";
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return "已导出 " + backup.conversations.length + " 条对话。";
+}, "正在导出对话…");
+
+$("import-history").onclick = () => historyFile.click();
+historyFile.onchange = () => {
+  const file = historyFile.files[0];
+  historyFile.value = "";
+  if (!file) return;
+  void transferHistory(async () => {
+    const count = await importHistory(JSON.parse(await file.text()));
+    await storageQueue;
+    const saved = await setupHistory();
+    chats = saved.chats;
+    renderHistory();
+    if (!active) void switchChat(chats[0]?.id ?? null);
+    return "已导入 " + count + " 条对话。";
+  }, "正在导入对话…");
+};
 
 $("new-chat").onclick = () => {
   switchChat(null);
@@ -496,17 +628,19 @@ document.addEventListener("keydown", (event) => {
 });
 matchMedia("(max-width: 900px)").addEventListener("change", () => sidebarOpen(false));
 
-const [savedSettings, savedHistory] = await Promise.allSettled([readSaved("settings"), readSaved("history")]);
+const [savedSettings, savedHistory] = await Promise.allSettled([readSaved("settings"), setupHistory()]);
 if (savedSettings.status === "fulfilled") settings = savedSettings.value;
 else notice("settings-error", "无法读取保存的 API 设置，请重新填写。");
-if (savedHistory.status === "fulfilled" && savedHistory.value) {
+if (savedHistory.status === "fulfilled") {
   chats = savedHistory.value.chats;
-  active = savedHistory.value.active;
-} else if (savedHistory.status === "rejected") {
-  showStorageNotice("无法读取保存的对话记录。");
+  if (savedHistory.value.migrationFailed) {
+    notice("storage-notice", "旧对话迁移失败。请确认浏览器允许站点存储后刷新。");
+  }
+} else {
+  notice("storage-notice", "无法读取保存的对话记录。");
 }
 initialized = true;
 fillSettings();
 showSettings(!settings);
-renderChat();
+void switchChat(savedHistory.value?.active ?? null, false);
 void updateKnowledge();

@@ -1,6 +1,6 @@
 # RustSBI Agent
 
-面向 RISC-V 固件开发者的网页问答工具。使用自己的 OpenAI 兼容 API，浏览器会检索 RustSBI Agent 的资料，并给出来源链接。API 密钥和近期对话加密后保存在当前浏览器的 Cookie 中。
+面向 RISC-V 固件开发者的网页问答工具。使用自己的 OpenAI 兼容 API，浏览器会检索 RustSBI Agent 的资料，并给出来源链接。API 密钥加密保存在 Cookie 中，对话历史加密保存在浏览器的 IndexedDB 中。可以从侧栏导出或导入对话备份。备份文件包含明文对话正文，不包含 API 密钥。
 
 ## 本地运行
 
