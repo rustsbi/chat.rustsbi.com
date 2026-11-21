@@ -37,6 +37,9 @@ jobs:
         run: |
           python -m pip install pypdfium2==5.15.2
           python scripts/index-agent.py agent-source
+      - name: Version page assets
+        run: |
+          sed -i -e "s|[.]/style[.]css|./style.css?v=$GITHUB_SHA|" -e "s|[.]/app[.]js|./app.js?v=$GITHUB_SHA|" dist/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:

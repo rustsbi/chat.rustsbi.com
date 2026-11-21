@@ -12,6 +12,15 @@ const refreshModelsButton = $("refresh-models");
 const scroll = $("chat-scroll");
 const list = $("messages");
 const sidebar = $("sidebar");
+const storageNotice = $("storage-notice");
+const storageStatus = element("span");
+const dismissStorageLimit = element("button", "icon-button");
+dismissStorageLimit.type = "button";
+dismissStorageLimit.setAttribute("aria-label", "关闭容量提示");
+dismissStorageLimit.append(icon("close"));
+storageStatus.setAttribute("role", "status");
+storageNotice.removeAttribute("role");
+storageNotice.append(storageStatus, dismissStorageLimit);
 const articles = new Map();
 const defaultEndpoint = "https://api.openai.com/v1";
 let chats = [];
@@ -20,6 +29,7 @@ let settings = null;
 let currentJob = null;
 let deletion = null;
 let storageQueue = Promise.resolve();
+let storageLimitDismissed = false;
 let initialized = false;
 let savingSettings = false;
 let modelRequest = null;
@@ -30,6 +40,17 @@ function notice(id, text = "") {
   node.hidden = !text;
 }
 
+function showStorageNotice(text = "", dismissible = false) {
+  storageStatus.textContent = text;
+  dismissStorageLimit.hidden = !dismissible;
+  storageNotice.hidden = !text;
+}
+
+dismissStorageLimit.onclick = () => {
+  storageLimitDismissed = true;
+  showStorageNotice();
+};
+
 function persist() {
   const snapshot = structuredClone(chats).map((chat) => ({
     ...chat,
@@ -39,9 +60,13 @@ function persist() {
   storageQueue = storageQueue.catch(() => {}).then(async () => {
     try {
       const limited = await saveHistory(snapshot, selected);
-      notice("storage-notice", limited ? "Cookie 容量有限。本次仅保存近期消息，刷新后可能看不到较早的内容。" : "");
+      if (limited && !storageLimitDismissed) {
+        showStorageNotice("Cookie 容量有限。本次仅保存近期消息，刷新后可能看不到较早的内容。", true);
+      } else {
+        showStorageNotice();
+      }
     } catch {
-      notice("storage-notice", "对话记录未能保存。请检查浏览器的 Cookie 和存储权限。");
+      showStorageNotice("对话记录未能保存。请检查浏览器的 Cookie 和存储权限。");
     }
   });
   return storageQueue;
@@ -478,7 +503,7 @@ if (savedHistory.status === "fulfilled" && savedHistory.value) {
   chats = savedHistory.value.chats;
   active = savedHistory.value.active;
 } else if (savedHistory.status === "rejected") {
-  notice("storage-notice", "无法读取保存的对话记录。");
+  showStorageNotice("无法读取保存的对话记录。");
 }
 initialized = true;
 fillSettings();
